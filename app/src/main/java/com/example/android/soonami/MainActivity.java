@@ -18,8 +18,10 @@ package com.example.android.soonami;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.text.TextUtils;
 import android.util.Log;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -40,12 +42,16 @@ import java.text.SimpleDateFormat;
  */
 public class MainActivity extends AppCompatActivity {
 
-    /** Tag for the log messages */
-    public static final String LOG_TAG = MainActivity.class.getSimpleName();
+    /**
+     * Tag for the log messages
+     */
+    public static final String LOG_TAG = MainActivity.class.getSimpleName();//"MainActivity"
 
-    /** URL to query the USGS dataset for earthquake information */
+    /**
+     * URL to query the USGS dataset for earthquake information
+     */
     private static final String USGS_REQUEST_URL =
-            "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2012-01-01&endtime=2012-12-01&minmagnitude=6";
+            "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2014-01-01&endtime=2014-12-01&minmagnitude=7";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -101,7 +107,14 @@ public class MainActivity extends AppCompatActivity {
      * update the UI with the first earthquake in the response.
      */
     private class TsunamiAsyncTask extends AsyncTask<URL, Void, Event> {
+        //AsyncTask 被设计为一个辅助类Thread，Handler 并且不构成通用线程框架。
+        // AsyncTasks 最适合用于短时间的操作（最多几秒钟）。
+        // 如果您需要保持线程长时间运行，强烈建议您使用java.util.concurrent包提供的各种 API，
+        // 例如Executor, ThreadPoolExecutor和FutureTask.
 
+
+        //AsyncTask 必须子类化才能使用。子类将覆盖至少一个方法 ( doInBackground(Params...))，
+        // 并且通常会覆盖第二个方法 ( onPostExecute(Result).)
         @Override
         protected Event doInBackground(URL... urls) {
             // Create URL object
@@ -143,6 +156,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 url = new URL(stringUrl);
             } catch (MalformedURLException exception) {
+//                exception.printStackTrace();
                 Log.e(LOG_TAG, "Error with creating URL", exception);
                 return null;
             }
@@ -154,18 +168,34 @@ public class MainActivity extends AppCompatActivity {
          */
         private String makeHttpRequest(URL url) throws IOException {
             String jsonResponse = "";
+            //HttpURLConnection是一个HTTP客户端
+            //可以用它来在Android中执行HTTP请求
+            //还可以用非google的第三方库，比如OkHttp
+            //OkHttp是由Square Mobile Payments Company创建的大众开源HTTP客户端
+
+            //If the URL is null, then return early
+            if (url == null) {
+                return jsonResponse;
+            }
             HttpURLConnection urlConnection = null;
             InputStream inputStream = null;
             try {
-                urlConnection = (HttpURLConnection) url.openConnection();
-                urlConnection.setRequestMethod("GET");
+                urlConnection = (HttpURLConnection) url.openConnection();//建立连接
+                urlConnection.setRequestMethod("GET");//写清楚请求方法
                 urlConnection.setReadTimeout(10000 /* milliseconds */);
                 urlConnection.setConnectTimeout(15000 /* milliseconds */);
-                urlConnection.connect();
-                inputStream = urlConnection.getInputStream();
-                jsonResponse = readFromStream(inputStream);
+                urlConnection.connect();//我们与Server建立HTTP连接，前面几行是为了设置HTTP请求，之后几行是为了接收响应，并在app中对响应作出解释
+
+                if (urlConnection.getResponseCode() == 200) {
+                    inputStream = urlConnection.getInputStream();//获得输入流
+                    jsonResponse = readFromStream(inputStream); //解析返回的输入流
+                } else {
+                    Log.e(LOG_TAG, String.valueOf(urlConnection.getResponseCode()));
+
+                }
             } catch (IOException e) {
                 // TODO: Handle the exception
+                Log.e(LOG_TAG, "Problem retrieving the earthquake JSON results.", e);
             } finally {
                 if (urlConnection != null) {
                     urlConnection.disconnect();
@@ -187,6 +217,7 @@ public class MainActivity extends AppCompatActivity {
             if (inputStream != null) {
                 InputStreamReader inputStreamReader = new InputStreamReader(inputStream, Charset.forName("UTF-8"));
                 BufferedReader reader = new BufferedReader(inputStreamReader);
+//                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, Charset.forName("UTF-8")));
                 String line = reader.readLine();
                 while (line != null) {
                     output.append(line);
@@ -201,6 +232,10 @@ public class MainActivity extends AppCompatActivity {
          * about the first earthquake from the input earthquakeJSON string.
          */
         private Event extractFeatureFromJson(String earthquakeJSON) {
+            if (TextUtils.isEmpty(earthquakeJSON)) {
+                return null;
+            }
+
             try {
                 JSONObject baseJsonResponse = new JSONObject(earthquakeJSON);
                 JSONArray featureArray = baseJsonResponse.getJSONArray("features");
